@@ -13,7 +13,7 @@ from datetime import datetime
 st.set_page_config(page_title="Phishing Detector", layout="centered")
 
 # Title with your student ID
-st.title(" Phishing Website Detector")
+st.title("🌐 Phishing Website Detector")
 st.markdown("**COM763-Advanced Machine Learning**")
 st.markdown("Enter a URL and click Check to see if it's a phishing site")
 
@@ -32,7 +32,7 @@ def load_model():
 model, scaler, feature_names = load_model()
 
 if model is not None:
-    st.success(" Model ready!")
+    st.success(" Ready!")
 else:
     st.error(" Model not loaded")
     st.stop()
@@ -191,12 +191,12 @@ url_input = st.text_input(
 
 st.session_state.url_input = url_input
 
-if st.button(" Check Website", type="primary", use_container_width=True):
+if st.button("🔍 Check Website", type="primary", use_container_width=True):
     
     url_to_check = st.session_state.url_input.strip()
     
     if not url_to_check:
-        st.warning(" Please enter a URL")
+        st.warning(" ⚠️Please enter a URL")
     else:
         try:
             # Fix URL
@@ -231,25 +231,25 @@ if st.button(" Check Website", type="primary", use_container_width=True):
             st.caption(f" Full URL: {url_to_check}")
             
             # Results
-            if prediction[0] == 1:
-                st.error(" **PHISHING DETECTED!**")
-                st.warning(f" {display_domain} appears to be a PHISHING site")
+        if prediction[0] == 1:
+                st.error("🚨 **PHISHING DETECTED!**")
+                st.warning(f"⚠️ {display_domain} appears to be a PHISHING site")
                 col1, col2 = st.columns(2)
-                col1.metric(" Phishing Confidence", f"{probability[1]*100:.1f}%", delta="High Risk")
-                col2.metric(" Legitimate Confidence", f"{probability[0]*100:.1f}%", delta="Low")
+                col1.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%", delta="High Risk")
+                col2.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%", delta="Low")
             else:
-                st.success(" **SAFE WEBSITE!**")
-                st.success(f" {display_domain} appears to be LEGITIMATE")
+                st.success("✅ **SAFE WEBSITE!**")
+                st.success(f"✅ {display_domain} appears to be LEGITIMATE")
                 col1, col2 = st.columns(2)
-                col1.metric(" Legitimate Confidence", f"{probability[0]*100:.1f}%", delta="High")
-                col2.metric(" Phishing Confidence", f"{probability[1]*100:.1f}%", delta="Low")
+                col1.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%", delta="High")
+                col2.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%", delta="Low")
             
             # Warning for suspicious domains
             if any(x in display_domain for x in ['xyz', 'club', 'online', 'top']):
-                st.info(" Note: .xyz, .club, .online domains are sometimes used for phishing. Always verify the website carefully.")
+                st.info("ℹ️ Note: .xyz, .club, .online domains are sometimes used for phishing. Always verify the website carefully.")
             
         except Exception as e:
-            st.error(f" Error: {e}")
+            st.error(f"❌ Error: {e}")
 
 # Footer
 st.markdown("---")
