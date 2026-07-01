@@ -11,7 +11,7 @@ st.set_page_config(page_title="Phishing Detector", layout="centered")
 
 # Title with your student ID
 st.title(" Phishing Website Detector")
-st.markdown("**S25021283 - Lokuwaduge Gishan Gavithra De Silva**")
+st.markdown("**COM763-Advanced Machine Learning**")
 st.markdown("Enter a URL and click Check to see if it's a phishing site")
 
 # Load model
