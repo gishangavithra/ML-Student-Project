@@ -219,4 +219,4 @@ if st.button(" Check Website", type="primary"):
             st.error(f" Error: {e}")
 
 st.markdown("---")
-st.caption("Phishing Detection using Machine Learning")
+st.caption("S25021283 - Lokuwaduge Gishan Gavithra De Silva | Phishing Detection using Machine Learning")
