@@ -28,9 +28,9 @@ def load_model():
 model, scaler, feature_names = load_model()
 
 if model is not None:
-    st.success("✅ Model ready!")
+    st.success("✅")
 else:
-    st.error("❌ Model not loaded")
+    st.error("❌ ")
     st.stop()
 
 # ==========================================
