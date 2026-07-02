@@ -12,7 +12,6 @@ from datetime import datetime
 st.set_page_config(page_title="Phishing Detector", layout="centered")
 
 st.title("🌐 Phishing Website Detector")
-st.markdown("**S25021283 - Lokuwaduge Gishan Gavithra De Silva**")
 st.markdown("Enter a URL and click Check to see if it's a phishing site")
 
 # Load model
