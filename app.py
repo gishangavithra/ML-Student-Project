@@ -6,7 +6,6 @@ import joblib
 import re
 from urllib.parse import urlparse
 import socket
-import whois
 from datetime import datetime
 
 # Page setup
@@ -41,34 +40,24 @@ else:
 def is_valid_domain(domain):
     """Check if domain exists and is valid"""
     try:
-        # Check if domain has valid format
         if not domain or len(domain) < 3:
             return False, "Domain too short"
         
-        # Must have a dot
         if '.' not in domain:
             return False, "Domain must have a dot (e.g., .com)"
         
-        # Check for valid TLD (common ones)
-        valid_tlds = ['.com', '.org', '.net', '.edu', '.gov', '.io', '.co', '.uk', '.de', '.fr', '.jp', '.au', '.ca', '.in']
-        has_valid_tld = any(domain.endswith(tld) for tld in valid_tlds)
-        
-        if not has_valid_tld:
-            return False, f"Unusual domain ending. Common TLDs: .com, .org, .net, .edu, .gov"
-        
-        # Check for suspicious patterns in domain
+        # Check for suspicious patterns
         suspicious_patterns = [
             r'\d+\.\d+\.\d+\.\d+',  # IP address
-            r'[a-zA-Z0-9]{30,}',     # Very long subdomain
             r'\.{2,}',               # Double dots
-            r'^[0-9]+',              # Starts with numbers
+            r'[a-zA-Z0-9]{50,}',     # Very long domain
         ]
         
         for pattern in suspicious_patterns:
             if re.search(pattern, domain):
                 return False, "Suspicious domain pattern detected"
         
-        # Try to resolve domain (check if it exists)
+        # Check if domain resolves (exists)
         try:
             socket.gethostbyname(domain)
             return True, "Domain exists"
@@ -83,34 +72,56 @@ def check_misspelled_domain(domain):
     famous_domains = [
         'google.com', 'facebook.com', 'youtube.com', 'amazon.com',
         'microsoft.com', 'apple.com', 'netflix.com', 'twitter.com',
-        'instagram.com', 'linkedin.com', 'wikipedia.org', 'yahoo.com'
+        'instagram.com', 'linkedin.com', 'wikipedia.org', 'yahoo.com',
+        'whatsapp.com', 'paypal.com', 'ebay.com', 'spotify.com'
     ]
     
-    for famous in famous_domains:
-        # Check if domain is similar but not exactly the same
-        if domain != famous:
-            # Remove TLD and compare
-            famous_base = famous.split('.')[0]
-            domain_base = domain.split('.')[0]
-            
-            # Check for misspelling (typo)
-            if len(domain_base) > 3 and len(famous_base) > 3:
-                # If domain contains the famous name but with extra chars
-                if famous_base in domain_base and domain != famous:
-                    return True, f"Domain may be a misspelling of {famous}"
-                
-                # Levenshtein-like check (simple)
-                if abs(len(domain_base) - len(famous_base)) <= 2:
-                    matches = sum(1 for a, b in zip(domain_base, famous_base) if a == b)
-                    if matches / max(len(domain_base), len(famous_base)) > 0.7:
-                        return True, f"Domain may be a misspelling of {famous}"
+    # Remove www. prefix if present
+    domain_clean = domain.replace('www.', '')
     
+    for famous in famous_domains:
+        if domain_clean == famous:
+            continue
+        
+        famous_base = famous.split('.')[0]
+        domain_base = domain_clean.split('.')[0]
+        
+        # Check if domain contains the famous name with extra characters
+        if famous_base in domain_base and domain_clean != famous:
+            return True, f"⚠️ May be a fake version of {famous}"
+        
+        # Check for one-character typo
+        if len(domain_base) > 3 and len(famous_base) > 3:
+            diff = abs(len(domain_base) - len(famous_base))
+            if diff <= 2:
+                # Count matching characters
+                matches = 0
+                for i in range(min(len(domain_base), len(famous_base))):
+                    if i < len(famous_base) and i < len(domain_base):
+                        if domain_base[i] == famous_base[i]:
+                            matches += 1
+                match_ratio = matches / max(len(domain_base), len(famous_base))
+                if match_ratio > 0.7 and domain_clean != famous:
+                    return True, f"⚠️ May be a misspelling of {famous}"
+    
+    return False, ""
+
+def check_suspicious_tld(domain):
+    """Check for suspicious TLDs"""
+    suspicious = [
+        '.xyz', '.top', '.club', '.online', '.site', 
+        '.click', '.link', '.work', '.date', '.download',
+        '.review', '.trade', '.stream', '.gq', '.ml', '.cf'
+    ]
+    for tld in suspicious:
+        if domain.endswith(tld):
+            return True, f"⚠️ Unusual TLD '{tld}' - often used for phishing"
     return False, ""
 
 
 
 def extract_all_features(url):
-    """Extract features from URL with better defaults"""
+    """Extract features from URL"""
     
     features = {}
     for f in feature_names:
@@ -260,34 +271,50 @@ if st.button("🔍 Check Website", type="primary", use_container_width=True):
             parsed = urlparse(url_to_check)
             display_domain = parsed.netloc
             
-          
             
             is_valid, validation_msg = is_valid_domain(display_domain)
             is_misspelled, misspell_msg = check_misspelled_domain(display_domain)
+            is_suspicious_tld, tld_msg = check_suspicious_tld(display_domain)
             
             st.markdown("---")
-            st.caption(f" Analyzed: {display_domain}")
+            st.caption(f"📌 Analyzed: {display_domain}")
             
-         
+       
             
-            # If domain doesn't exist or is misspelled, mark as PHISHING
-            if not is_valid or is_misspelled:
+            # Count how many warning flags are triggered
+            warning_count = 0
+            warning_messages = []
+            
+            if not is_valid:
+                warning_count += 1
+                warning_messages.append(f"❌ {validation_msg}")
+            
+            if is_misspelled:
+                warning_count += 1
+                warning_messages.append(f"❌ {misspell_msg}")
+            
+            if is_suspicious_tld:
+                warning_count += 1
+                warning_messages.append(f"❌ {tld_msg}")
+            
+            # If any warnings, mark as PHISHING
+            if warning_count > 0:
                 st.error("🚨 **PHISHING DETECTED!**")
                 st.warning(f"⚠️ {display_domain} appears to be a PHISHING or FAKE website")
                 
+                for msg in warning_messages:
+                    st.error(msg)
+                
                 if not is_valid:
-                    st.error(f"❌ Domain Issue: {validation_msg}")
+                    st.info("💡 **Tip:** The domain does not exist or cannot be resolved. This is a common sign of phishing.")
                 
                 if is_misspelled:
-                    st.error(f"❌ Misspelling Detected: {misspell_msg}")
+                    st.info("💡 **Tip:** Phishing sites often use misspelled versions of real websites. Always double-check the URL.")
                 
-                st.info("💡 **Tip:** Always double-check the domain name. Phishing sites often use misspelled versions of real websites.")
-                
-                # Show fake domain warning
-                st.warning("⚠️ **THIS IS A FAKE DOMAIN** - Do not enter any personal information!")
+                st.warning("⚠️ **DO NOT enter any personal information on this website!**")
                 
             else:
-              
+               
                 
                 with st.spinner(f"🔍 Analyzing {display_domain}..."):
                     features_dict = extract_all_features(url_to_check)
@@ -304,17 +331,13 @@ if st.button("🔍 Check Website", type="primary", use_container_width=True):
                     col1, col2 = st.columns(2)
                     col1.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%")
                     col2.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%")
+                    st.info("💡 **Tip:** Phishing sites try to steal your personal information. Always verify the URL carefully.")
                 else:
                     st.success("✅ **SAFE WEBSITE!**")
                     st.success(f"✅ {display_domain} appears to be LEGITIMATE")
                     col1, col2 = st.columns(2)
                     col1.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%")
                     col2.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%")
-                
-                # Security tips for suspicious TLDs
-                suspicious_tlds = ['.xyz', '.club', '.online', '.top', '.site', '.click', '.link', '.work', '.date']
-                if any(display_domain.endswith(tld) for tld in suspicious_tlds):
-                    st.info("⚠️ **Security Note:** Unusual domains (.xyz, .club, .online) are often used for phishing. Always verify carefully.")
             
         except Exception as e:
             st.error(f"❌ Error: {e}")
