@@ -5,12 +5,15 @@ import pandas as pd
 import joblib
 import re
 from urllib.parse import urlparse
+import socket
+import whois
+from datetime import datetime
 
 # Page setup
 st.set_page_config(page_title="Phishing Detector", layout="centered")
 
-# Title with your student ID
 st.title("🌐 Phishing Website Detector")
+st.markdown("**S25021283 - Lokuwaduge Gishan Gavithra De Silva**")
 st.markdown("Enter a URL and click Check to see if it's a phishing site")
 
 # Load model
@@ -28,26 +31,92 @@ def load_model():
 model, scaler, feature_names = load_model()
 
 if model is not None:
-    st.success("✅")
+    st.success("✅ ")
 else:
     st.error("❌ ")
     st.stop()
 
-# ==========================================
-# FEATURE EXTRACTION
-# ==========================================
+
+
+def is_valid_domain(domain):
+    """Check if domain exists and is valid"""
+    try:
+        # Check if domain has valid format
+        if not domain or len(domain) < 3:
+            return False, "Domain too short"
+        
+        # Must have a dot
+        if '.' not in domain:
+            return False, "Domain must have a dot (e.g., .com)"
+        
+        # Check for valid TLD (common ones)
+        valid_tlds = ['.com', '.org', '.net', '.edu', '.gov', '.io', '.co', '.uk', '.de', '.fr', '.jp', '.au', '.ca', '.in']
+        has_valid_tld = any(domain.endswith(tld) for tld in valid_tlds)
+        
+        if not has_valid_tld:
+            return False, f"Unusual domain ending. Common TLDs: .com, .org, .net, .edu, .gov"
+        
+        # Check for suspicious patterns in domain
+        suspicious_patterns = [
+            r'\d+\.\d+\.\d+\.\d+',  # IP address
+            r'[a-zA-Z0-9]{30,}',     # Very long subdomain
+            r'\.{2,}',               # Double dots
+            r'^[0-9]+',              # Starts with numbers
+        ]
+        
+        for pattern in suspicious_patterns:
+            if re.search(pattern, domain):
+                return False, "Suspicious domain pattern detected"
+        
+        # Try to resolve domain (check if it exists)
+        try:
+            socket.gethostbyname(domain)
+            return True, "Domain exists"
+        except:
+            return False, "Domain does not exist or cannot be resolved"
+            
+    except Exception as e:
+        return False, f"Domain validation error: {e}"
+
+def check_misspelled_domain(domain):
+    """Check if domain looks like a misspelled famous domain"""
+    famous_domains = [
+        'google.com', 'facebook.com', 'youtube.com', 'amazon.com',
+        'microsoft.com', 'apple.com', 'netflix.com', 'twitter.com',
+        'instagram.com', 'linkedin.com', 'wikipedia.org', 'yahoo.com'
+    ]
+    
+    for famous in famous_domains:
+        # Check if domain is similar but not exactly the same
+        if domain != famous:
+            # Remove TLD and compare
+            famous_base = famous.split('.')[0]
+            domain_base = domain.split('.')[0]
+            
+            # Check for misspelling (typo)
+            if len(domain_base) > 3 and len(famous_base) > 3:
+                # If domain contains the famous name but with extra chars
+                if famous_base in domain_base and domain != famous:
+                    return True, f"Domain may be a misspelling of {famous}"
+                
+                # Levenshtein-like check (simple)
+                if abs(len(domain_base) - len(famous_base)) <= 2:
+                    matches = sum(1 for a, b in zip(domain_base, famous_base) if a == b)
+                    if matches / max(len(domain_base), len(famous_base)) > 0.7:
+                        return True, f"Domain may be a misspelling of {famous}"
+    
+    return False, ""
+
+
 
 def extract_all_features(url):
-    """Extract features from URL"""
+    """Extract features from URL with better defaults"""
     
     features = {}
-    
-    # Initialize all features with default values
     for f in feature_names:
         features[f] = -1
     
     try:
-        # Clean URL
         if not url.startswith(('http://', 'https://')):
             url = 'http://' + url
         
@@ -100,7 +169,6 @@ def extract_all_features(url):
             features['qty_and_directory'] = min(path.count('&'), 5)
             features['length_path'] = min(len(path), 200)
             
-            # File part
             file_part = path.split('/')[-1] if path else ''
             if file_part:
                 features['qty_dot_file'] = min(file_part.count('.'), 5)
@@ -154,13 +222,11 @@ def extract_all_features(url):
         features['ssl_age'] = 365
         
     except Exception as e:
-        st.warning(f"Error extracting features: {e}")
+        pass
     
     return features
 
-# ==========================================
-# URL INPUT
-# ==========================================
+
 
 if 'url_input' not in st.session_state:
     st.session_state.url_input = ""
@@ -191,48 +257,67 @@ if st.button("🔍 Check Website", type="primary", use_container_width=True):
                 first_protocol_end = url_to_check.find('://') + 3
                 url_to_check = url_to_check[:first_protocol_end] + url_to_check[first_protocol_end:].replace('http://', '').replace('https://', '')
             
-            # Extract domain for display
             parsed = urlparse(url_to_check)
             display_domain = parsed.netloc
             
-            with st.spinner(f"🔍 Analyzing {display_domain}..."):
-                features_dict = extract_all_features(url_to_check)
-                input_df = pd.DataFrame([features_dict])[feature_names]
-                
-                # Scale
-                input_scaled = scaler.transform(input_df)
-                
-                # Predict
-                prediction = model.predict(input_scaled)
-                probability = model.predict_proba(input_scaled)[0]
+          
             
-            # Show results
+            is_valid, validation_msg = is_valid_domain(display_domain)
+            is_misspelled, misspell_msg = check_misspelled_domain(display_domain)
+            
             st.markdown("---")
-            
-            # Show analyzed URL
             st.caption(f" Analyzed: {display_domain}")
             
-            # Results
-            if prediction[0] == 1:
-                st.error("🚨 **PHISHING DETECTED!**")
-                st.warning(f"⚠️ {display_domain} appears to be a PHISHING site")
-                col1, col2 = st.columns(2)
-                col1.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%")
-                col2.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%")
-            else:
-                st.success("✅ **SAFE WEBSITE!**")
-                st.success(f"✅ {display_domain} appears to be LEGITIMATE")
-                col1, col2 = st.columns(2)
-                col1.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%")
-                col2.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%")
+         
             
-            # Warning for suspicious TLDs
-            if any(x in display_domain for x in ['.xyz', '.club', '.online', '.top', '.site']):
-                st.info("ℹ️ Note: Unusual domains (.xyz, .club, .online) are sometimes used for phishing. Always verify carefully.")
+            # If domain doesn't exist or is misspelled, mark as PHISHING
+            if not is_valid or is_misspelled:
+                st.error("🚨 **PHISHING DETECTED!**")
+                st.warning(f"⚠️ {display_domain} appears to be a PHISHING or FAKE website")
+                
+                if not is_valid:
+                    st.error(f"❌ Domain Issue: {validation_msg}")
+                
+                if is_misspelled:
+                    st.error(f"❌ Misspelling Detected: {misspell_msg}")
+                
+                st.info("💡 **Tip:** Always double-check the domain name. Phishing sites often use misspelled versions of real websites.")
+                
+                # Show fake domain warning
+                st.warning("⚠️ **THIS IS A FAKE DOMAIN** - Do not enter any personal information!")
+                
+            else:
+              
+                
+                with st.spinner(f"🔍 Analyzing {display_domain}..."):
+                    features_dict = extract_all_features(url_to_check)
+                    input_df = pd.DataFrame([features_dict])[feature_names]
+                    
+                    input_scaled = scaler.transform(input_df)
+                    prediction = model.predict(input_scaled)
+                    probability = model.predict_proba(input_scaled)[0]
+                
+                # Show ML results
+                if prediction[0] == 1:
+                    st.error("🚨 **PHISHING DETECTED!**")
+                    st.warning(f"⚠️ {display_domain} appears to be a PHISHING site")
+                    col1, col2 = st.columns(2)
+                    col1.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%")
+                    col2.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%")
+                else:
+                    st.success("✅ **SAFE WEBSITE!**")
+                    st.success(f"✅ {display_domain} appears to be LEGITIMATE")
+                    col1, col2 = st.columns(2)
+                    col1.metric("✅ Legitimate Confidence", f"{probability[0]*100:.1f}%")
+                    col2.metric("⚠️ Phishing Confidence", f"{probability[1]*100:.1f}%")
+                
+                # Security tips for suspicious TLDs
+                suspicious_tlds = ['.xyz', '.club', '.online', '.top', '.site', '.click', '.link', '.work', '.date']
+                if any(display_domain.endswith(tld) for tld in suspicious_tlds):
+                    st.info("⚠️ **Security Note:** Unusual domains (.xyz, .club, .online) are often used for phishing. Always verify carefully.")
             
         except Exception as e:
             st.error(f"❌ Error: {e}")
-            st.info("Please check the URL and try again")
 
 # Footer
 st.markdown("---")
